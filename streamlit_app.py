@@ -48,4 +48,3 @@ if ingredients_list and name_on_order:
         ).collect()
 
         st.success("Your Smoothie is ordered!", icon="✅")
-
