@@ -1,52 +1,51 @@
+# Import python packages
 import streamlit as st
 #from snowflake.snowpark.context import get_active_session
-from snowflake.snowpark.functions import col, when_matched
-
-st.title(":cup_with_straw: Pending Smoothie Orders :cup_with_straw:")
-st.write("Orders that need to be filled.")
+from snowflake.snowpark.functions import col
 
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-my_dataframe = (
-    session.table("SMOOTHIES.PUBLIC.ORDERS")
-    .filter(col("ORDER_FILLED") == 0)
-    .collect()
+st.title(":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
+
+st.write("Choose the fruits you want in your custom Smoothie!")
+
+
+name_on_order = st.text_input('Name on Smoothie')
+st.write('The name for your Smoothie will be:', name_on_order)
+
+fruit_dataframe = (
+    session.table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS")
+    .select(col("FRUIT_NAME"))
 )
 
-if my_dataframe:
-    editable_df = st.data_editor(
-        my_dataframe,
-        use_container_width=True
-    )
+fruit_options = [
+    row["FRUIT_NAME"]
+    for row in fruit_dataframe.collect()
+]
 
-    submitted = st.button("Submit")
+ingredients_list = st.multiselect(
+    "Choose up to 5 ingredients:",
+    fruit_options,
+    max_selections=5
+)
 
-    if submitted:
-        og_dataset = session.table("SMOOTHIES.PUBLIC.ORDERS")
-        edited_dataset = session.create_dataframe(editable_df)
+if ingredients_list and name_on_order:
+    ingredients_string = " ".join(ingredients_list)
 
-        try:
-            og_dataset.merge(
-                edited_dataset,
-                og_dataset["ORDER_UID"] == edited_dataset["ORDER_UID"],
-                [
-                    when_matched().update(
-                        {
-                            "ORDER_FILLED": edited_dataset["ORDER_FILLED"]
-                        }
-                    )
-                ]
-            )
+    submit_order = st.button("Submit Order")
 
-            st.success("Order(s) Updated!", icon="👍")
+    if submit_order:
+        my_insert_stmt = """
+            INSERT INTO SMOOTHIES.PUBLIC.ORDERS
+                (INGREDIENTS, NAME_ON_ORDER)
+            VALUES (?, ?)
+        """
 
-        except Exception:
-            st.write("Something went wrong.")
+        session.sql(
+            my_insert_stmt,
+            params=[ingredients_string, name_on_order]
+        ).collect()
 
-else:
-    st.success(
-        "There are no pending orders right now.",
-        icon="👍"
-    )
+        st.success("Your Smoothie is ordered!", icon="✅")
 
